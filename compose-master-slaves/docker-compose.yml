@@ -1,0 +1,30 @@
+version: '2.1'
+
+services:
+  master:
+    image: docker-spark-master
+    ports:
+      - 8080:8080
+      - 7077:7077
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      interval: 5s
+      timeout: 3s
+      retries: 3
+
+  slave:
+    image: docker-spark-slave
+    command: spark://master:7077
+    depends_on:
+      master:
+        condition: service_healthy
+
+  driver:
+    image: docker-spark-driver
+    volumes:
+      - ./sample:/spark/sample
+      - ~:/spark/home
+    working_dir: /spark/home
+    depends_on:
+      master:
+        condition: service_healthy
