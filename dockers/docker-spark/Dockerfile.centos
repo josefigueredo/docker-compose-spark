@@ -5,7 +5,9 @@ ENV SPARK_RELEASE spark-2.4.0-bin-hadoop2.7
 ENV SPARK_HOME /spark/${SPARK_RELEASE}
 ENV PATH ${PATH}:${SPARK_HOME}/bin
 
-RUN apk add --no-cache --update bash sed grep procps coreutils
+RUN yum update -y && \
+    yum install -y bash sed grep procps coreutils && \
+    yum clean all
 RUN sed -i -e "s/bin\/ash/bin\/bash/" /etc/passwd
 RUN mkdir /spark
 RUN cd /tmp
