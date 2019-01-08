@@ -44,7 +44,7 @@ $spark_install_master = <<SCRIPT
     echo "spark.master spark://10.1.0.4:7077" >> /home/vagrant/spark/conf/spark-defaults.conf
     echo "SPARK_LOCAL_IP=10.1.0.4" >> /home/vagrant/spark/conf/spark-env.sh
     echo "SPARK_MASTER_IP=10.1.0.4" >> /home/vagrant/spark/conf/spark-env.sh
-    /home/vagrant/miniconda/bin/conda install -y numpy pandas
+    #/home/vagrant/miniconda/bin/conda install -y numpy pandas
 SCRIPT
 
 $zeppelin_install = <<SCRIPT
@@ -91,13 +91,13 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
         node.vm.provision :shell, :inline => $openjdk8_install
         
-        node.vm.provision :shell, :inline => $miniconda_install
+#        node.vm.provision :shell, :inline => $miniconda_install
 
         # node.vm.provision :shell, :inline => $docker_install
 
-        node.vm.provision :shell, :inline => $spark_install_master
+#        node.vm.provision :shell, :inline => $spark_install_master
 
-        node.vm.provision "shell", run: "always", inline: "/home/vagrant/spark/sbin/start-master.sh -h 10.1.0.4"
+#        node.vm.provision "shell", run: "always", inline: "/home/vagrant/spark/sbin/start-master.sh -h 10.1.0.4"
 
         node.vm.provision :shell, :inline => $zeppelin_install
   
