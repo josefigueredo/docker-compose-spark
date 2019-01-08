@@ -91,13 +91,13 @@ Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
 
         node.vm.provision :shell, :inline => $openjdk8_install
         
-#        node.vm.provision :shell, :inline => $miniconda_install
+        node.vm.provision :shell, :inline => $miniconda_install
 
         # node.vm.provision :shell, :inline => $docker_install
 
-#        node.vm.provision :shell, :inline => $spark_install_master
+        node.vm.provision :shell, :inline => $spark_install_master
 
-#        node.vm.provision "shell", run: "always", inline: "/home/vagrant/spark/sbin/start-master.sh -h 10.1.0.4"
+        node.vm.provision "shell", run: "always", inline: "/home/vagrant/spark/sbin/start-master.sh -h 10.1.0.4"
 
         node.vm.provision :shell, :inline => $zeppelin_install
   
