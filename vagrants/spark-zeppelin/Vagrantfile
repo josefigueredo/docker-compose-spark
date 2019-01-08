@@ -1,0 +1,143 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# Jose Figueredo 
+
+VAGRANTFILE_API_VERSION = "2"
+
+$tools_install = <<SCRIPT
+apt-get update -qq
+apt-get install -y curl
+apt-get install -y git
+apt-get install -y wget
+apt-get install -y nano
+apt-get install -y mc
+apt-get install -y gcc-4.8 g++-4.8
+SCRIPT
+
+$openjdk8_install = <<SCRIPT
+    add-apt-repository ppa:openjdk-r/ppa -y
+    apt-get update -qq
+    apt-get install -y openjdk-8-jdk
+    export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64
+    echo "export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" >> /home/vagrant/.bashrc
+    export PATH=$PATH:/usr/lib/jvm/java-8-openjdk-amd64/bin
+    echo "export PATH=$PATH:/usr/lib/jvm/java-8-openjdk-amd64/bin" >> /home/vagrant/.bashrc
+SCRIPT
+
+$miniconda_install = <<SCRIPT 
+    bash /vagrant/Miniconda3-latest-Linux-x86_64.sh -b -p /home/vagrant/miniconda
+    export PATH="/home/vagrant/miniconda/bin:$PATH"
+    echo "export PATH=/home/vagrant/miniconda/bin:$PATH" >> /home/vagrant/.bashrc
+    source /home/vagrant/miniconda/bin/activate
+    echo "/home/vagrant/miniconda/bin/activate" >> /home/vagrant/.bashrc
+SCRIPT
+
+$spark_install_master = <<SCRIPT 
+    apt-get install -y python-dev ntp
+    mkdir /home/vagrant/spark
+    tar xf /vagrant/spark-2.4.0-bin-hadoop2.7.tgz -C /home/vagrant/spark --strip 1
+    export SPARK_HOME=/home/vagrant/spark
+    echo "export SPARK_HOME=/home/vagrant/spark" >> /home/vagrant/.bashrc
+    export PATH=$PATH:/home/vagrant/spark/bin
+    echo "export PATH=$PATH:/home/vagrant/spark/bin" >> /home/vagrant/.bashrc
+    echo "spark.master spark://10.1.0.4:7077" >> /home/vagrant/spark/conf/spark-defaults.conf
+    echo "SPARK_LOCAL_IP=10.1.0.4" >> /home/vagrant/spark/conf/spark-env.sh
+    echo "SPARK_MASTER_IP=10.1.0.4" >> /home/vagrant/spark/conf/spark-env.sh
+    /home/vagrant/miniconda/bin/conda install -y numpy pandas
+SCRIPT
+
+$zeppelin_install = <<SCRIPT
+    mkdir /home/vagrant/zeppelin
+    tar xf /vagrant/zeppelin-0.8.0-bin-all.tgz -C /home/vagrant/zeppelin --strip 1
+    export ZEPPELIN_HOME=/home/vagrant/zeppelin
+    echo "export ZEPPELIN_HOME=/home/vagrant/zeppelin" >> /home/vagrant/.bashrc
+    cp /home/vagrant/zeppelin/conf/zeppelin-env.sh.template /home/vagrant/zeppelin/conf/zeppelin-env.sh
+    echo "export ZEPPELIN_PORT=8180" >> /home/vagrant/zeppelin/conf/zeppelin-env.sh
+SCRIPT
+
+$docker_install = <<SCRIPT
+    wget -q -O - https://get.docker.io/gpg | apt-key add -
+    echo deb http://get.docker.io/ubuntu docker main > /etc/apt/sources.list.d/docker.list
+    apt-get update -qq
+    apt-get install -q -y --force-yes lxc-docker
+    usermod -a -G docker vagrant
+    sed -e 's/DOCKER_OPTS=/DOCKER_OPTS=\"-H 0.0.0.0:4243\"/g' /etc/init/docker.conf > /vagrant/docker.conf.sed
+    cp /vagrant/docker.conf.sed /etc/init/docker.conf
+    rm -f /vagrant/docker.conf.sed
+    service docker restart
+SCRIPT
+
+Vagrant.configure(VAGRANTFILE_API_VERSION) do |config|
+
+    N_WORKERS = 0
+
+    config.vm.box = "ubuntu/bionic64"
+
+    # Master node
+    config.vm.define "dev" do |node|
+        node.vm.hostname = "hn-dev"
+
+        node.vm.network "private_network", ip: "10.1.0.4"
+        
+        node.vm.provider "virtualbox" do |vb|
+            vb.name = "spark-master"
+            vb.gui = false
+            vb.memory = 2048
+            vb.cpus = 1
+        end
+
+        node.vm.provision :shell, :inline => $tools_install
+
+        node.vm.provision :shell, :inline => $openjdk8_install
+        
+        node.vm.provision :shell, :inline => $miniconda_install
+
+        # node.vm.provision :shell, :inline => $docker_install
+
+        node.vm.provision :shell, :inline => $spark_install_master
+
+        node.vm.provision "shell", run: "always", inline: "/home/vagrant/spark/sbin/start-master.sh -h 10.1.0.4"
+
+        node.vm.provision :shell, :inline => $zeppelin_install
+  
+        node.vm.provision "shell", run: "always", inline: "/home/vagrant/zeppelin/bin/zeppelin-daemon.sh start"
+
+    end
+
+    # Worker nodes:
+    (0..N_WORKERS-1).each do |i|
+        config.vm.define "wn#{i}" do |node|
+            node.vm.hostname = "wn#{i}"
+            node.vm.network "private_network", ip: "10.1.0.1#{i}"
+
+            node.vm.provider "virtualbox" do |vb|
+                vb.name = "spark-slave-#{i}"
+                vb.gui = false
+                vb.memory = 2048
+                vb.cpus = 1
+            end
+
+            node.vm.provision :shell, :inline => $tools_install
+
+            node.vm.provision :shell, :inline => $openjdk8_install
+
+            node.vm.provision :shell, :inline => $miniconda_install
+
+            $spark_install_slave = <<-SHELL 
+                apt-get install -y python-dev ntp avahi-daemon
+                mkdir /home/vagrant/spark
+                tar xf /vagrant/spark-2.4.0-bin-hadoop2.7.tgz -C /home/vagrant/spark --strip 1
+                echo "export SPARK_HOME=/home/vagrant/spark" >> /home/vagrant/.bashrc
+                export SPARK_HOME=/home/vagrant/spark
+                echo "export PATH=$PATH:/home/vagrant/spark/bin" >> /home/vagrant/.bashrc
+                export PATH=$PATH:/home/vagrant/spark/bin
+                echo SPARK_LOCAL_IP=10.1.0.1#{i} >> /home/vagrant/spark/conf/spark-env.sh
+                echo SPARK_MASTER_IP=10.1.0.4 >> /home/vagrant/spark/conf/spark-env.sh
+            SHELL
+
+            node.vm.provision "shell", run: "always", inline: "/home/vagrant/spark/sbin/start-slave.sh -h 10.1.0.1#{i} spark://10.1.0.4:7077"
+        end
+    end
+
+end
